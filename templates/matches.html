@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Matched Users</h2>
+{% if match %}
+    
+        <li>
+            <strong>{{ match.username }}</strong><br>
+            Email: {{ match.email }}<br>
+            Interests: {{ match.interests }}
+        </li>
+   
+{% else %}
+    <p>No matches found based on your interests.</p>
+{% endif %}
+<a href="{{ url_for('index') }}" class="btn">Back to Home</a>
+{% endblock %}

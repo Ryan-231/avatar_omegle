@@ -14,9 +14,13 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 def get_db_connection():
     connection = mysql.connector.connect(
-        host=app.config['MYSQL_HOST'],
-        user=app.config['MYSQL_USER'],
-        password=app.config['MYSQL_PASSWORD']
+        host=os.getenv('MYSQL_HOST'),
+        port=os.getenv('MYSQL_PORT'),
+        user=os.getenv('MYSQL_USER'),
+        password=os.getenv('MYSQL_PASSWORD'),
+        database=os.getenv('MYSQL_DATABASE'),
+        ssl_ca=os.getenv('CA_CERT_PATH'),
+        ssl_disabled=False
     )
     return connection
 
@@ -55,13 +59,13 @@ def get_user_info(user_id):
 
 
 
+
 @app.route('/profile', methods=['GET', 'POST'])
 def profile():
     # Ensure user is logged in
     if 'user_id' not in session:
         flash('You must be logged in to edit your profile!')
         return redirect(url_for('index'))
-
     user_id = session['user_id']  # Get the logged-in user's ID
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
@@ -70,22 +74,17 @@ def profile():
     user = cursor.fetchone()
     cursor.close()
     connection.close()
-
     if not user:
         flash('User not found. Please log in again.')
         return redirect(url_for('logout'))
-    
     # Handle profile update and action
     if request.method == 'POST':
         action = request.form.get('action')  # Get the action (Save Changes or Suggest More Interests)
-
         if action == "Save Changes":
-            
             # Save the updated profile
             username = request.form['username']
             email = request.form['email']
             interests = request.form['interests']
-
             connection = get_db_connection()
             cursor = connection.cursor()
             cursor.execute(f"USE {app.config['MYSQL_DATABASE']}")
@@ -93,20 +92,57 @@ def profile():
                 UPDATE users
                 SET username = %s, email = %s, interests = %s
                 WHERE id = %s
-            """, (username, email, interests, user_id,))
+            """, (username, email, interests, user_id))
             connection.commit()
             cursor.close()
             connection.close()
-
             flash('Profile updated successfully!')
-            return redirect(url_for('profile'))  # Ensure the session remains intact
-
+            return redirect(url_for('profile'))
         elif action == "Suggest More Interests":
-            # Handle suggesting more interests (your existing logic here)
-            pass
-
+            # Get interests from form and make API request
+            interests = request.form['interests']
+            suggestions = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": f"Based on the user's interests: {interests}\nRewrite in a list separated form a more grammatically correct form of the list as well as additional interests based on their current ones."}
+                        ]
+                    }
+                ],
+                "systemInstruction": {
+                    "role": "system",
+                    "parts": [
+                        {"text": "Rewrite in list form a list of interests. Just output a comma-separated list."}
+                    ]
+                }
+            }
+            api_key = os.getenv('API_KEY')
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+            try:
+                response = requests.post(url, headers={'Content-Type': 'application/json'}, json=suggestions)
+                response.raise_for_status()  # Raise an exception for HTTP error responses
+                response_content = response.json()['candidates'][0]['content']['parts'][0]['text']
+                
+                # Update user interests in the database
+                connection = get_db_connection()
+                cursor = connection.cursor()
+                cursor.execute(f"USE {app.config['MYSQL_DATABASE']}")
+                cursor.execute("""
+                    UPDATE users
+                    SET interests = %s
+                    WHERE id = %s
+                """, (response_content, user_id))
+                connection.commit()
+                cursor.close()
+                connection.close()
+                flash('Interests updated based on suggestions!')
+                return redirect(url_for('profile'))
+            except requests.exceptions.RequestException as e:
+                flash(f"Error fetching suggestions: {e}")
+                return redirect(url_for('profile'))
     # Pass the correct user data to the template
     return render_template('profile.html', user=user)
+
 
 
 

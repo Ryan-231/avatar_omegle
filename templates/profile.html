@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Edit Profile</h2>
+<form method="post">
+    <label for="username">Username:</label>
+    <input type="text" name="username" id="username" value="{{ user['username'] }}" required>
+    
+    <label for="email">Email:</label>
+    <input type="email" name="email" id="email" value="{{ user['email'] }}" required>
+
+    <label for="password">Password:</label>
+    <input type="password" name="password" id="password" value="{{ user['password'] }}" required>
+
+
+    <label for="interests">Interests:</label>
+    <textarea name="interests" id="interests">{{ user['interests'] }}</textarea>
+
+    <button type="submit" name="action" value="Save Changes">Save Changes</button>
+    <button type="submit" name="action" value="Suggest More Interests">Suggest More Interests</button>
+</form>
+
+<a href="{{ url_for('index') }}" class="btn">Back to Home</a>
+
+
+{% endblock %}

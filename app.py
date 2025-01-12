@@ -2,7 +2,10 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 import mysql.connector
 import requests
 import os
+from dotenv import load_dotenv
 
+# Load environment variables from .env file (replace 'path/to/.env' with your actual path)
+load_dotenv()
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
@@ -71,12 +74,13 @@ def profile():
     if not user:
         flash('User not found. Please log in again.')
         return redirect(url_for('logout'))
-
+    
     # Handle profile update and action
     if request.method == 'POST':
         action = request.form.get('action')  # Get the action (Save Changes or Suggest More Interests)
 
         if action == "Save Changes":
+            
             # Save the updated profile
             username = request.form['username']
             email = request.form['email']
@@ -89,62 +93,21 @@ def profile():
                 UPDATE users
                 SET username = %s, email = %s, interests = %s
                 WHERE id = %s
-            """, (username, email, interests, user_id))
+            """, (username, email, interests, user_id,))
             connection.commit()
             cursor.close()
             connection.close()
 
             flash('Profile updated successfully!')
-            return redirect(url_for('profile'))
+            return redirect(url_for('profile'))  # Ensure the session remains intact
 
         elif action == "Suggest More Interests":
-            # Get interests from form and make API request
-            interests = request.form['interests']
-            suggestions = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": f"Based on the user's interests: {interests}\nRewrite in a list separated form a more grammatically correct form of the list as well as additional interests based on their current ones."}
-                        ]
-                    }
-                ],
-                "systemInstruction": {
-                    "role": "system",
-                    "parts": [
-                        {"text": "Rewrite in list form a list of interests. Just output a comma-separated list."}
-                    ]
-                }
-            }
-
-            api_key = os.getenv('API_KEY')
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
-
-            try:
-                response = requests.post(url, headers={'Content-Type': 'application/json'}, json=suggestions)
-                response.raise_for_status()  # Raise an exception for HTTP error responses
-                response_content = response.json()['candidates'][0]['content']['parts'][0]['text']
-                
-                # Update user interests in the database
-                connection = get_db_connection()
-                cursor = connection.cursor()
-                cursor.execute(f"USE {app.config['MYSQL_DATABASE']}")
-                cursor.execute("""
-                    UPDATE users
-                    SET interests = %s
-                    WHERE id = %s
-                """, (response_content, user_id))
-                connection.commit()
-                cursor.close()
-                connection.close()
-
-                flash('Interests updated based on suggestions!')
-                return redirect(url_for('profile'))
-            except requests.exceptions.RequestException as e:
-                flash(f"Error fetching suggestions: {e}")
-                return redirect(url_for('profile'))
+            # Handle suggesting more interests (your existing logic here)
+            pass
 
     # Pass the correct user data to the template
     return render_template('profile.html', user=user)
+
 
 
 
@@ -198,7 +161,7 @@ def match():
         cursor.close()
         connection.close()
         flash("No matches found.")
-        return redirect(url_for('index'))
+        return render_template('matches.html' )
 
     for potential_match in potential_matches:
         print (potential_match)
@@ -234,7 +197,7 @@ def match():
 
     # No matches found
     flash("No matches found based on your interests.")
-    return redirect(url_for('index'))
+    return render_template('matches.html' )
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -269,6 +232,7 @@ def logout():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    print ("u")
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
@@ -277,32 +241,45 @@ def signup():
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute(f"USE {app.config['MYSQL_DATABASE']}")
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email))
+        cursor.execute("SELECT * FROM users WHERE email = %s AND username= %s", (email,username,))
         existing_user = cursor.fetchone()
 
         if existing_user:
-            flash('Email already exists! Please try logging in.')
+            flash('Email or username already exists! Please try logging in.')
             return redirect(url_for('login'))
+        
+
+    
+        
+
 
         cursor.execute("""
             INSERT INTO users (username, email, password)
             VALUES (%s, %s, %s)
         """, (username, email, password))
+        connection.commit()
+        print("User inserted successfully\n", flush=True)
+        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
         user = cursor.fetchone()
+        print ("Hey", flush=True)
+        print (user, flush=True)
         connection.commit()
         cursor.close()
         connection.close()
         if user:
             session['user_id'] = user['id']
+            print ("success", flush=True)
   # Set user_id in the session
             flash('Logged in successfully!')
             return render_template('profile.html', user=user)
         else:
+            print ("No", flush=True)
             flash('Invalid username or password. Please try again.')
-        return redirect(url_for('index'))
+        print ("helooooo", flush=True)
+        return redirect(url_for('signup'))
 
     return render_template('signup.html')
 
 if __name__ == '__main__':
     create_database_and_tables()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(debug=True)
